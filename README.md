@@ -1,3 +1,9 @@
+<p align="center">
+  <a href="https://www.castov.com">
+    <img src="./assets/castov-logo-horizontal.png" alt="Castov" width="260" />
+  </a>
+</p>
+
 # Castov AI & MCP Security Audit
 
 Deterministic, zero-network security audit (`CAS-001`–`CAS-016`) for Model Context Protocol (MCP) servers, AI agent configurations (`.mcp.json`, Claude Desktop, Cursor, Windsurf, Cline, `.claude/settings.json`), and leaked secrets in GitHub Actions (`runs.using: node24`).
