@@ -1,0 +1,82 @@
+name: Castov Action CI (Node 24)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  verify-action:
+    name: Verify Node 24 Action Execution
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Verify zero external runtime dependencies in dist/index.cjs
+        run: |
+          node -e '
+            const fs = require("node:fs");
+            const bundle = fs.readFileSync("dist/index.cjs", "utf8");
+            const reqs = [...bundle.matchAll(/require\(["'\'']([^"'\'']+)["'\'']\)/g)].map((m) => m[1]);
+            for (const mod of reqs) {
+              if (!mod.startsWith("node:")) {
+                throw new Error("Unexpected non-builtin require: " + mod);
+              }
+            }
+            console.log("Verified builtin-only requires:", [...new Set(reqs)]);
+          '
+
+      - name: Prepare clean and findings fixtures
+        run: |
+          mkdir -p .ci-fixtures/clean .ci-fixtures/findings
+          printf '.env\n' > .ci-fixtures/clean/.gitignore
+          printf '{"mcpServers":{"docs":{"command":"node","args":["docs.js"]}}}\n' > .ci-fixtures/clean/.mcp.json
+          printf '.env\n' > .ci-fixtures/findings/.gitignore
+          printf '{"mcpServers":{"pay":{"command":"npx","args":["-y","pay-mcp"],"env":{"OPENAI_API_KEY":"sk-test-FAKE-00000000000000000000000000000000"}}}}\n' > .ci-fixtures/findings/.mcp.json
+
+      - name: Run Castov Action on clean fixture
+        id: clean_audit
+        uses: ./
+        with:
+          path: ".ci-fixtures/clean"
+          format: "sarif"
+          report-file: ".ci-fixtures/clean-results.sarif"
+          fail-on: "high"
+          annotations: "true"
+          summary: "true"
+          comment-on-pr: "false"
+
+      - name: Assert clean fixture outputs
+        run: |
+          test "${{ steps.clean_audit.outputs.audit-status }}" = "complete"
+          test "${{ steps.clean_audit.outputs.exit-code }}" = "0"
+          test "${{ steps.clean_audit.outputs.findings-count }}" = "0"
+          test -f .ci-fixtures/clean-results.sarif
+
+      - name: Run Castov Action on findings fixture
+        id: findings_audit
+        continue-on-error: true
+        uses: ./
+        with:
+          path: ".ci-fixtures/findings"
+          format: "sarif"
+          report-file: ".ci-fixtures/findings-results.sarif"
+          fail-on: "critical"
+          annotations: "true"
+          summary: "true"
+          comment-on-pr: "false"
+
+      - name: Assert findings fixture outputs and secret masking
+        run: |
+          test "${{ steps.findings_audit.outputs.audit-status }}" = "complete"
+          test "${{ steps.findings_audit.outputs.exit-code }}" = "1"
+          test "${{ steps.findings_audit.outputs.critical-count }}" -ge 1
+          if grep -q "sk-test-FAKE-00000000000000000000000000000000" .ci-fixtures/findings-results.sarif; then
+            echo "ERROR: Raw secret leaked in SARIF report!"
+            exit 1
+          fi

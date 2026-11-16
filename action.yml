@@ -1,29 +1,78 @@
-name: 'Castov Security & Quality Scan'
-description: 'Fast offline secret scanning, port checks, and environment validation for CI/CD'
-author: 'Castov'
+name: "Castov AI & MCP Security Audit"
+description: "Deterministic security audit (CAS-001 to CAS-016) for MCP servers, AI agent configs, and leaked secrets."
+author: "Castov (https://castov.com)"
 branding:
-  icon: 'shield-check'
-  color: 'blue'
+  icon: "shield"
+  color: "blue"
 
 inputs:
-  command:
-    description: 'Castov command to execute (e.g. scan, cidr, verify)'
+  path:
+    description: "Target directory to audit relative to workspace"
     required: false
-    default: 'scan'
-  args:
-    description: 'Arguments to pass to the Castov command (e.g. path or flags)'
+    default: "."
+  format:
+    description: "Primary report format written to report-file (sarif | json | md | text)"
     required: false
-    default: '.'
+    default: "sarif"
+  fail-on:
+    description: "Minimum severity to fail the workflow (critical | high | medium | low | none)"
+    required: false
+    default: "high"
+  fail-on-incomplete:
+    description: "Fail the workflow if discovery limits or filesystem skips make the scan incomplete (true | false)"
+    required: false
+    default: "true"
+  baseline:
+    description: "Optional path to a Castov baseline JSON file inside workspace"
+    required: false
+    default: ""
+  ignore-rules:
+    description: "Comma-separated list of rule IDs to ignore (e.g. CAS-002,CAS-014)"
+    required: false
+    default: ""
+  report-file:
+    description: "Output path for the generated report relative to workspace"
+    required: false
+    default: "castov-results.sarif"
+  sarif-file:
+    description: "Optional path to always emit a SARIF 2.1.0 report alongside format"
+    required: false
+    default: ""
+  annotations:
+    description: "Emit GitHub workflow annotations (::error / ::warning) for findings"
+    required: false
+    default: "true"
+  summary:
+    description: "Write Markdown audit summary to GITHUB_STEP_SUMMARY"
+    required: false
+    default: "true"
+  comment-on-pr:
+    description: "Post or update a minimal Castov PR summary comment when pull_requests: write is granted"
+    required: false
+    default: "false"
+  github-token:
+    description: "GitHub token used only when comment-on-pr is enabled"
+    required: false
+    default: "${{ github.token }}"
+
+outputs:
+  audit-status:
+    description: "Audit completion status (complete | incomplete | failed)"
+  exit-code:
+    description: "Audit exit code (0 = passed, 1 = failed)"
+  findings-count:
+    description: "Total findings count"
+  critical-count:
+    description: "Critical findings count"
+  high-count:
+    description: "High findings count"
+  skipped-files-count:
+    description: "Number of files or directories skipped during discovery"
+  report-file:
+    description: "Workspace-relative path to the generated report file"
+  sarif-file:
+    description: "Workspace-relative path to the SARIF file if generated"
 
 runs:
-  using: 'composite'
-  steps:
-    - name: Set up Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '20'
-
-    - name: Run Castov CLI
-      shell: bash
-      run: |
-        npx --yes castov@1.3.3 ${{ inputs.command }} ${{ inputs.args }}
+  using: "node24"
+  main: "dist/index.cjs"
